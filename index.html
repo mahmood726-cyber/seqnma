@@ -457,6 +457,13 @@ body::before {
 (function() {
 'use strict';
 
+// --- CSV injection guard ---
+function csvSafe(s) {
+  s = String(s);
+  if (/^[=+@\t\r]/.test(s)) return "'" + s;
+  return s;
+}
+
 // ============ CONSTANTS & HELPERS ============
 
 const DEMO_CSV = `Study,Year,Treat1,Treat2,Effect,SE
@@ -796,7 +803,7 @@ function computeRIS(alpha, power, delta, tau2, studies, adjustedAlpha) {
     const k = studies.length;
     const sumInvV = studies.reduce((s, st) => s + 1 / st.variance, 0);
     const sumInvV2 = studies.reduce((s, st) => s + 1 / (st.variance * st.variance), 0);
-    D2 = 1 + tau2 * (sumInvV2 / (sumInvV * sumInvV) * k - 1);
+    D2 = 1 + tau2 * ((sumInvV2 / (sumInvV * sumInvV)) * k - 1);
     D2 = Math.max(1, D2);
   }
 
@@ -1452,7 +1459,7 @@ function exportCSV(seqResult) {
     const sr = seqResult.sequentialResults[comp];
     if (!sr) continue;
     for (const p of sr.points) {
-      csv += `"${comp}","${p.study}",${p.year},${p.effect.toFixed(6)},${p.se.toFixed(6)},${p.ci_lo.toFixed(6)},${p.ci_hi.toFixed(6)},${p.z.toFixed(6)},${p.infoFraction.toFixed(6)},${p.boundary.toFixed(6)},${p.pointStatus}\n`;
+      csv += `"${csvSafe(comp)}","${csvSafe(p.study)}",${p.year},${p.effect.toFixed(6)},${p.se.toFixed(6)},${p.ci_lo.toFixed(6)},${p.ci_hi.toFixed(6)},${p.z.toFixed(6)},${p.infoFraction.toFixed(6)},${p.boundary.toFixed(6)},${p.pointStatus}\n`;
     }
   }
   downloadFile('seqnma_results.csv', csv, 'text/csv');
