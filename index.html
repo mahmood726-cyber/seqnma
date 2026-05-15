@@ -345,16 +345,16 @@ body::before {
   <!-- Input Panel -->
   <div class="input-panel glass">
     <div>
-      <label>Study Data (CSV)</label>
-      <textarea id="csvInput" spellcheck="false" placeholder="Study,Year,Treat1,Treat2,Effect,SE&#10;Adams 2010,2010,A,B,-0.25,0.12&#10;..."></textarea>
+      <label for="csvInput">Study Data (CSV)</label>
+      <textarea id="csvInput" aria-label="Study data CSV" spellcheck="false" placeholder="Study,Year,Treat1,Treat2,Effect,SE&#10;Adams 2010,2010,A,B,-0.25,0.12&#10;..."></textarea>
     </div>
     <div class="btn-row">
       <button class="btn btn-secondary" id="btnDemo" title="Load demo data">Demo Data</button>
       <button class="btn btn-secondary" id="btnClear" title="Clear input">Clear</button>
     </div>
     <div>
-      <label>Effect Scale</label>
-      <select id="effectScale">
+      <label for="effectScale">Effect Scale</label>
+      <select id="effectScale" aria-label="Effect scale">
         <option value="SMD">SMD</option>
         <option value="logOR">logOR</option>
         <option value="logRR">logRR</option>
@@ -363,22 +363,22 @@ body::before {
     </div>
     <div class="input-row">
       <div>
-        <label>Delta (CID)</label>
-        <input type="number" id="deltaInput" value="0.2" step="0.01" min="0.01">
+        <label for="deltaInput">Delta (CID)</label>
+        <input type="number" id="deltaInput" aria-label="Delta clinically important difference" value="0.2" step="0.01" min="0.01">
       </div>
       <div>
-        <label>Alpha</label>
-        <input type="number" id="alphaInput" value="0.05" step="0.01" min="0.001" max="0.2">
+        <label for="alphaInput">Alpha</label>
+        <input type="number" id="alphaInput" aria-label="Alpha" value="0.05" step="0.01" min="0.001" max="0.2">
       </div>
     </div>
     <div class="input-row">
       <div>
-        <label>Power (1 - beta)</label>
-        <input type="number" id="powerInput" value="0.80" step="0.01" min="0.5" max="0.99">
+        <label for="powerInput">Power (1 - beta)</label>
+        <input type="number" id="powerInput" aria-label="Power" value="0.80" step="0.01" min="0.5" max="0.99">
       </div>
       <div>
-        <label>Treatments</label>
-        <input type="number" id="treatCount" value="-" disabled style="color:var(--text-secondary);">
+        <label for="treatCount">Treatments</label>
+        <input type="number" id="treatCount" aria-label="Treatment count" value="-" disabled style="color:var(--text-secondary);">
       </div>
     </div>
     <button class="btn btn-primary" id="btnAnalyze">Analyze</button>
@@ -402,8 +402,8 @@ body::before {
     <!-- Tab 1: Sequential Boundary Plot -->
     <div class="tab-content active" id="tab-boundary">
       <div class="comparison-select-row">
-        <label>Comparison:</label>
-        <select id="boundaryComparisonSelect"></select>
+        <label for="boundaryComparisonSelect">Comparison:</label>
+        <select id="boundaryComparisonSelect" aria-label="Boundary comparison"></select>
       </div>
       <div class="svg-container" id="boundaryPlotContainer">
         <div class="placeholder">Load data and click Analyze to view boundary plots</div>
@@ -413,8 +413,8 @@ body::before {
     <!-- Tab 2: Cumulative NMA Forest -->
     <div class="tab-content" id="tab-forest">
       <div class="comparison-select-row">
-        <label>Comparison:</label>
-        <select id="forestComparisonSelect"></select>
+        <label for="forestComparisonSelect">Comparison:</label>
+        <select id="forestComparisonSelect" aria-label="Forest comparison"></select>
       </div>
       <div class="svg-container" id="forestPlotContainer">
         <div class="placeholder">Load data and click Analyze to view cumulative forest</div>
@@ -424,8 +424,8 @@ body::before {
     <!-- Tab 3: Network Graph Evolution -->
     <div class="tab-content" id="tab-network">
       <div class="slider-row">
-        <label>Year:</label>
-        <input type="range" id="networkYearSlider" min="2010" max="2021" value="2021" step="1">
+        <label for="networkYearSlider">Year:</label>
+        <input type="range" id="networkYearSlider" aria-label="Network year" min="2010" max="2021" value="2021" step="1">
         <span class="year-display" id="networkYearDisplay">2021</span>
       </div>
       <div class="svg-container" id="networkGraphContainer">

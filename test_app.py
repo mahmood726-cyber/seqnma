@@ -4,23 +4,18 @@ Sequential Network Meta-Analysis browser tool
 18+ tests covering statistical engine, UI, and exports.
 """
 import os
-import sys
 import time
-import json
 import pytest
-import subprocess
 import threading
 import http.server
 import socketserver
-import io
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
 
 PORT = 8791
+HOST = "127.0.0.1"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 TIMEOUT = 60
 
@@ -30,28 +25,26 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+class ReusableTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
 @pytest.fixture(scope="session")
 def server():
     """Start a local HTTP server."""
     os.chdir(APP_DIR)
     handler = QuietHandler
-    httpd = socketserver.TCPServer(("", PORT), handler)
+    httpd = ReusableTCPServer((HOST, PORT), handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
-    yield f"http://localhost:{PORT}/index.html"
+    yield f"http://{HOST}:{PORT}/index.html"
     httpd.shutdown()
+    httpd.server_close()
 
 
 @pytest.fixture(scope="session")
 def driver(server):
     """Create a headless Chrome driver."""
-    # Kill orphan chrome/chromedriver
-    if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "chromedriver.exe"],
-            capture_output=True,
-        )
-
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -93,6 +86,37 @@ def js(driver, script):
     return driver.execute_script(f"return {script}")
 
 
+def ensure_demo_result(driver):
+    """Load the canonical demo dataset when a prior test changed UI state."""
+    result = driver.execute_script("return window.SeqNMA.getCurrentResult()")
+    if (
+        not result
+        or len(result.get("allStudies", [])) != 12
+        or sorted(result.get("treatments", [])) != ["A", "B", "C", "D"]
+    ):
+        load_demo_and_analyze(driver)
+    return WebDriverWait(driver, 5).until(
+        lambda d: d.execute_script("return window.SeqNMA.getCurrentResult()")
+    )
+
+
+def switch_tab(driver, tab_name):
+    """Switch tabs and wait until the target panel is active."""
+    btn = driver.find_element(By.CSS_SELECTOR, f'[data-tab="{tab_name}"]')
+    driver.execute_script("arguments[0].click();", btn)
+    panel_id = f"tab-{tab_name}"
+    return WebDriverWait(driver, 5).until(
+        lambda d: "active" in d.find_element(By.ID, panel_id).get_attribute("class")
+    )
+
+
+def wait_for_id(driver, element_id):
+    """Wait for a rendered element by id."""
+    return WebDriverWait(driver, 5).until(
+        lambda d: d.find_element(By.ID, element_id)
+    )
+
+
 # ===== TEST 1: App loads without JS errors =====
 def test_01_app_loads_no_js_errors(driver):
     """App loads without JS errors."""
@@ -115,10 +139,14 @@ def test_02_demo_data_loads(driver):
 # ===== TEST 3: Network graph SVG has 4 nodes =====
 def test_03_network_graph_4_nodes(driver):
     """Network graph SVG has 4 nodes (treatments A-D)."""
-    # Switch to network tab
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="network"]').click()
-    time.sleep(0.5)
-    svg = driver.find_element(By.ID, "networkGraphSVG")
+    ensure_demo_result(driver)
+    switch_tab(driver, "network")
+    driver.execute_script(
+        "const slider = document.getElementById('networkYearSlider');"
+        "slider.value = slider.max;"
+        "slider.dispatchEvent(new Event('input', {bubbles: true}));"
+    )
+    svg = wait_for_id(driver, "networkGraphSVG")
     circles = svg.find_elements(By.TAG_NAME, "circle")
     assert len(circles) == 4, f"Expected 4 nodes, got {len(circles)}"
 
@@ -143,6 +171,7 @@ def test_04_obf_boundary_formula(driver):
 # ===== TEST 5: RIS calculation is positive =====
 def test_05_ris_positive(driver):
     """RIS calculation: for delta=0.2, alpha=0.05, power=0.80, RIS > 0."""
+    ensure_demo_result(driver)
     result = js(driver, "window.SeqNMA.getCurrentResult()")
     for comp in result["comparisons"]:
         sr = result["sequentialResults"].get(comp)
@@ -153,6 +182,7 @@ def test_05_ris_positive(driver):
 # ===== TEST 6: Information fraction increases monotonically =====
 def test_06_info_fraction_monotonic(driver):
     """Information fraction increases as studies added (monotonic)."""
+    ensure_demo_result(driver)
     result = js(driver, "window.SeqNMA.getCurrentResult()")
     for comp in result["comparisons"]:
         sr = result["sequentialResults"].get(comp)
@@ -169,9 +199,9 @@ def test_06_info_fraction_monotonic(driver):
 # ===== TEST 7: Boundary plot SVG renders =====
 def test_07_boundary_plot_renders(driver):
     """Boundary plot SVG renders for selected comparison."""
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="boundary"]').click()
-    time.sleep(0.5)
-    svg = driver.find_element(By.ID, "boundaryPlotSVG")
+    ensure_demo_result(driver)
+    switch_tab(driver, "boundary")
+    svg = wait_for_id(driver, "boundaryPlotSVG")
     assert svg is not None
     # Check it has paths (boundary lines) and circles (observed points)
     paths = svg.find_elements(By.TAG_NAME, "path")
@@ -183,6 +213,7 @@ def test_07_boundary_plot_renders(driver):
 # ===== TEST 8: Cumulative NMA pooled effect changes =====
 def test_08_cumulative_effect_changes(driver):
     """Cumulative NMA: pooled effect changes as studies added."""
+    ensure_demo_result(driver)
     result = js(driver, "window.SeqNMA.getCurrentResult()")
     # Check A vs B comparison (has 3 direct studies)
     sr = result["sequentialResults"].get("A vs B")
@@ -197,6 +228,7 @@ def test_08_cumulative_effect_changes(driver):
 # ===== TEST 9: Bonferroni adjustment =====
 def test_09_bonferroni_adjustment(driver):
     """Bonferroni adjustment: alpha/6 for 6 comparisons (4 choose 2)."""
+    ensure_demo_result(driver)
     result = js(driver, "window.SeqNMA.getCurrentResult()")
     assert result["numComparisons"] == 6, f"Expected 6 comparisons, got {result['numComparisons']}"
     expected_adj = 0.05 / 6
@@ -208,9 +240,9 @@ def test_09_bonferroni_adjustment(driver):
 # ===== TEST 10: Futility boundary labeled non-binding =====
 def test_10_futility_non_binding(driver):
     """Futility boundary labeled 'non-binding'."""
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="boundary"]').click()
-    time.sleep(0.5)
-    svg_el = driver.find_element(By.ID, "boundaryPlotSVG")
+    ensure_demo_result(driver)
+    switch_tab(driver, "boundary")
+    svg_el = wait_for_id(driver, "boundaryPlotSVG")
     svg_html = svg_el.get_attribute("outerHTML")
     assert "non-binding" in svg_html.lower(), "Futility boundary must be labeled 'non-binding'"
 
@@ -219,6 +251,7 @@ def test_10_futility_non_binding(driver):
 def test_11_design_effect_formula(driver):
     """Design effect D^2 uses tau^2-based formula (NOT cluster DEFF)."""
     # Verify D^2 for a comparison with tau^2 > 0
+    ensure_demo_result(driver)
     result = js(driver, "window.SeqNMA.getCurrentResult()")
     tau2 = result["tau2"]
 
@@ -302,9 +335,9 @@ def test_14_star_network_indirect(driver):
 # ===== TEST 15: League table 4x4 with 6 unique comparisons =====
 def test_15_league_table(driver):
     """League table: 4x4 matrix with 6 unique comparisons."""
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="league"]').click()
-    time.sleep(0.5)
-    table = driver.find_element(By.ID, "leagueTableElement")
+    ensure_demo_result(driver)
+    switch_tab(driver, "league")
+    table = wait_for_id(driver, "leagueTableElement")
     rows = table.find_elements(By.TAG_NAME, "tr")
     # Header + 4 data rows = 5
     assert len(rows) == 5, f"Expected 5 rows (header + 4), got {len(rows)}"
@@ -318,9 +351,9 @@ def test_15_league_table(driver):
 # ===== TEST 16: Information tracker table renders =====
 def test_16_info_tracker_renders(driver):
     """Information tracker table renders."""
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="info"]').click()
-    time.sleep(0.5)
-    table = driver.find_element(By.ID, "infoTrackerTable")
+    ensure_demo_result(driver)
+    switch_tab(driver, "info")
+    table = wait_for_id(driver, "infoTrackerTable")
     rows = table.find_elements(By.CSS_SELECTOR, "tbody tr")
     assert len(rows) == 6, f"Expected 6 comparison rows, got {len(rows)}"
     # Check badges exist
@@ -331,8 +364,8 @@ def test_16_info_tracker_renders(driver):
 # ===== TEST 17: Network evolution slider changes graph =====
 def test_17_network_slider_changes_graph(driver):
     """Network evolution slider changes graph."""
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="network"]').click()
-    time.sleep(0.5)
+    ensure_demo_result(driver)
+    switch_tab(driver, "network")
 
     slider = driver.find_element(By.ID, "networkYearSlider")
 
@@ -355,8 +388,8 @@ def test_17_network_slider_changes_graph(driver):
 # ===== TEST 18: Export CSV =====
 def test_18_export_csv(driver):
     """Export CSV produces valid content."""
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="boundary"]').click()
-    time.sleep(0.3)
+    ensure_demo_result(driver)
+    switch_tab(driver, "boundary")
 
     # Build CSV content via JS — count data rows
     row_count = driver.execute_script(
@@ -379,6 +412,7 @@ def test_18_export_csv(driver):
 # ===== TEST 19: NMA basic parameter estimation =====
 def test_19_nma_parameter_estimation(driver):
     """NMA basic parameters are consistent across comparisons."""
+    ensure_demo_result(driver)
     result = js(driver, "window.SeqNMA.getCurrentResult()")
     nma = result["fullNMA"]
     comps = {c["comp"]: c for c in nma["comparisons"]}
@@ -403,6 +437,7 @@ def test_19_nma_parameter_estimation(driver):
 # ===== TEST 20: Tau-squared is non-negative =====
 def test_20_tau2_nonnegative(driver):
     """Tau-squared from NMA is non-negative."""
+    ensure_demo_result(driver)
     result = js(driver, "window.SeqNMA.getCurrentResult()")
     assert result["tau2"] >= 0, f"tau2 should be >= 0, got {result['tau2']}"
 
@@ -419,9 +454,9 @@ def test_21_phi_qnorm_inverse(driver):
 # ===== TEST 22: Forest plot renders =====
 def test_22_forest_plot_renders(driver):
     """Cumulative forest plot SVG renders."""
-    driver.find_element(By.CSS_SELECTOR, '[data-tab="forest"]').click()
-    time.sleep(0.5)
-    svg = driver.find_element(By.ID, "forestPlotSVG")
+    ensure_demo_result(driver)
+    switch_tab(driver, "forest")
+    svg = wait_for_id(driver, "forestPlotSVG")
     assert svg is not None
     # Should have rect elements (diamond points)
     rects = svg.find_elements(By.TAG_NAME, "rect")
