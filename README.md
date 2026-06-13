@@ -35,11 +35,10 @@ Browser-based tool extending Trial Sequential Analysis (TSA) to network meta-ana
 ## Testing
 
 ```bash
-cd C:\Models\SeqNMA
 python -m pytest test_app.py -v
 ```
 
-22 tests covering: NMA engine, boundary formulas, Bonferroni, monotonic information, 2-/3-/4-treatment networks, star topology indirect comparisons, league table, export, UI rendering.
+Requires Selenium and Chrome (Edge fallback). 22 tests covering: NMA engine, boundary formulas, Bonferroni, monotonic information, 2-/3-/4-treatment networks, star topology indirect comparisons, league table, export, UI rendering.
 
 ## Author
 
